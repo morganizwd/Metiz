@@ -24,8 +24,12 @@ import {
     DialogActions,
     TextField,
     Box,
+    Grid,
 } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+import { Document, Packer, Paragraph, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell, TextRun } from 'docx';
 
 function MetizOrders() {
     const [orders, setOrders] = useState([]);
@@ -141,6 +145,95 @@ function MetizOrders() {
         }
     };
 
+    // Функция для экспорта в Excel
+    const exportToExcel = () => {
+        // Подготовка данных
+        const data = filteredOrders.map((order) => ({
+            'ID Заказа': order.id,
+            'Время выполнения': order.completion_time || 'Не указано',
+            'Имя Клиента': `${order.User.name} ${order.User.surname}`,
+            'Телефон Клиента': order.User.phone,
+            'Пожелания': order.description,
+            'Адрес Доставки': order.delivery_address,
+            'Товары': order.OrderItems.map(item => `${item.Product.name} x ${item.quantity}`).join('; '),
+            'Общая Стоимость (₽)': order.total_cost,
+            'Статус': order.status,
+            'Дата Заказа': new Date(order.date_of_ordering).toLocaleString(),
+        }));
+
+        // Создание рабочей книги и листа
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Заказы');
+
+        // Генерация буфера и сохранение файла
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const dataBlob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+        saveAs(dataBlob, 'metiz_orders_report.xlsx');
+    };
+
+    // Функция для экспорта в Word
+    const exportToWord = async () => {
+        // Создание таблицы
+        const tableRows = [
+            new DocxTableRow({
+                children: [
+                    new DocxTableCell({ children: [new Paragraph('ID Заказа')] }),
+                    new DocxTableCell({ children: [new Paragraph('Время выполнения')] }),
+                    new DocxTableCell({ children: [new Paragraph('Имя Клиента')] }),
+                    new DocxTableCell({ children: [new Paragraph('Телефон Клиента')] }),
+                    new DocxTableCell({ children: [new Paragraph('Пожелания')] }),
+                    new DocxTableCell({ children: [new Paragraph('Адрес Доставки')] }),
+                    new DocxTableCell({ children: [new Paragraph('Товары')] }),
+                    new DocxTableCell({ children: [new Paragraph('Общая Стоимость (₽)')] }),
+                    new DocxTableCell({ children: [new Paragraph('Статус')] }),
+                    new DocxTableCell({ children: [new Paragraph('Дата Заказа')] }),
+                ],
+            }),
+        ];
+
+        filteredOrders.forEach(order => {
+            tableRows.push(new DocxTableRow({
+                children: [
+                    new DocxTableCell({ children: [new Paragraph(order.id.toString())] }),
+                    new DocxTableCell({ children: [new Paragraph(order.completion_time || 'Не указано')] }),
+                    new DocxTableCell({ children: [new Paragraph(`${order.User.name} ${order.User.surname}`)] }),
+                    new DocxTableCell({ children: [new Paragraph(order.User.phone)] }),
+                    new DocxTableCell({ children: [new Paragraph(order.description || '—')] }),
+                    new DocxTableCell({ children: [new Paragraph(order.delivery_address)] }),
+                    new DocxTableCell({ children: [new Paragraph(order.OrderItems.map(item => `${item.Product.name} x ${item.quantity}`).join('; '))] }),
+                    new DocxTableCell({ children: [new Paragraph(order.total_cost.toString())] }),
+                    new DocxTableCell({ children: [new Paragraph(order.status)] }),
+                    new DocxTableCell({ children: [new Paragraph(new Date(order.date_of_ordering).toLocaleString())] }),
+                ],
+            }));
+        });
+
+        const doc = new Document({
+            sections: [{
+                properties: {},
+                children: [
+                    new Paragraph({
+                        text: 'Отчет по заказам Metiz',
+                        heading: 'Title',
+                        alignment: 'CENTER',
+                    }),
+                    new Paragraph({ text: '', spacing: { after: 200 } }), // Пустая строка
+                    new DocxTable({
+                        rows: tableRows,
+                        width: {
+                            size: 100,
+                            type: 'pct',
+                        },
+                    }),
+                ],
+            }],
+        });
+
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, 'metiz_orders_report.docx');
+    };
+
     if (loading)
         return (
             <Container sx={{ textAlign: 'center', marginTop: '50px' }}>
@@ -164,7 +257,7 @@ function MetizOrders() {
                 Управление Заказами
             </Typography>
 
-            <Box sx={{ display: 'flex', gap: 2, marginBottom: '20px' }}>
+            <Box sx={{ display: 'flex', gap: 2, marginBottom: '20px', flexWrap: 'wrap' }}>
                 <TextField
                     label="Поиск по дате (ГГГГ-ММ-ДД)"
                     type="date"
@@ -195,8 +288,26 @@ function MetizOrders() {
                         setSearchDate('');
                         setSearchStatus('');
                     }}
+                    sx={{ minWidth: '150px' }}
                 >
                     Сбросить фильтры
+                </Button>
+            </Box>
+
+            <Box sx={{ marginBottom: '20px', display: 'flex', gap: 2 }}>
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={exportToExcel}
+                >
+                    Экспорт в Excel
+                </Button>
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={exportToWord}
+                >
+                    Экспорт в Word
                 </Button>
             </Box>
 
@@ -217,7 +328,6 @@ function MetizOrders() {
                                 <TableCell>Общая Стоимость</TableCell>
                                 <TableCell>Статус</TableCell>
                                 <TableCell>Дата Заказа</TableCell>
-
                                 <TableCell>Действия</TableCell>
                             </TableRow>
                         </TableHead>
@@ -250,7 +360,7 @@ function MetizOrders() {
                                         {order.User.name} {order.User.surname}
                                     </TableCell>
                                     <TableCell>{order.User.phone}</TableCell>
-                                    <TableCell>{order.description}</TableCell>
+                                    <TableCell>{order.description || '—'}</TableCell>
                                     <TableCell>{order.delivery_address}</TableCell>
                                     <TableCell>
                                         <ul style={{ paddingLeft: '20px', margin: 0 }}>
@@ -279,7 +389,6 @@ function MetizOrders() {
                                     <TableCell>
                                         {new Date(order.date_of_ordering).toLocaleString()}
                                     </TableCell>
-
                                     <TableCell>
                                         <Button
                                             variant="contained"
@@ -315,7 +424,6 @@ function MetizOrders() {
             </Dialog>
         </Container>
     );
-
 }
 
 export default MetizOrders;

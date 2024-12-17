@@ -17,8 +17,12 @@ import {
     DialogContent,
     DialogContentText,
     DialogActions,
+    Grid,
 } from '@mui/material';
 import { FaStar } from 'react-icons/fa';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun } from 'docx';
 
 function Orders() {
     const { authData } = useContext(AuthContext);
@@ -150,11 +154,140 @@ function Orders() {
         }
     };
 
+    // Функция для экспорта в Excel
+    const exportToExcel = () => {
+        // Подготовка данных
+        const data = filteredOrders.map((order) => ({
+            'Номер заказа': order.id,
+            'Адрес доставки': order.delivery_address,
+            'Время готовности': order.completion_time,
+            'Дата заказа': new Date(order.date_of_ordering).toLocaleString(),
+            'Статус': order.status,
+            'Итоговая сумма (₽)': order.total_cost,
+            'Товары': order.OrderItems.map(item => `${item.Product.name} x ${item.quantity} = ${item.Product.price * item.quantity} ₽`).join('; '),
+        }));
+
+        // Создание рабочей книги и листа
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Заказы');
+
+        // Генерация буфера и сохранение файла
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const dataBlob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+        saveAs(dataBlob, 'orders_report.xlsx');
+    };
+
+    // Функция для экспорта в Word
+    const exportToWord = async () => {
+        // Создание таблицы
+        const tableRows = [
+            new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph('Номер заказа')] }),
+                    new TableCell({ children: [new Paragraph('Адрес доставки')] }),
+                    new TableCell({ children: [new Paragraph('Время готовности')] }),
+                    new TableCell({ children: [new Paragraph('Дата заказа')] }),
+                    new TableCell({ children: [new Paragraph('Статус')] }),
+                    new TableCell({ children: [new Paragraph('Итоговая сумма (₽)')] }),
+                    new TableCell({ children: [new Paragraph('Товары')] }),
+                ],
+            }),
+        ];
+
+        filteredOrders.forEach(order => {
+            tableRows.push(new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph(order.id.toString())] }),
+                    new TableCell({ children: [new Paragraph(order.delivery_address)] }),
+                    new TableCell({ children: [new Paragraph(order.completion_time)] }),
+                    new TableCell({ children: [new Paragraph(new Date(order.date_of_ordering).toLocaleString())] }),
+                    new TableCell({ children: [new Paragraph(order.status)] }),
+                    new TableCell({ children: [new Paragraph(order.total_cost.toString())] }),
+                    new TableCell({ children: [new Paragraph(order.OrderItems.map(item => `${item.Product.name} x ${item.quantity} = ${item.Product.price * item.quantity} ₽`).join('; '))] }),
+                ],
+            }));
+        });
+
+        const table = new Table({
+            rows: tableRows,
+            width: {
+                size: 100,
+                type: "pct",
+            },
+        });
+
+        const doc = new Document({
+            sections: [{
+                properties: {},
+                children: [
+                    new Paragraph({
+                        text: "Отчет по заказам",
+                        heading: "Heading1",
+                        alignment: "center",
+                    }),
+                    new Paragraph({
+                        text: "\n",
+                    }),
+                    table,
+                ],
+            }],
+        });
+
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, "orders_report.docx");
+    };
+
     return (
         <Container sx={{ padding: '20px' }}>
             <Typography variant="h4" component="h1" gutterBottom>
                 Мои заказы
             </Typography>
+
+            {/* Раздел для фильтрации и экспорта отчетов */}
+            <Box sx={{ marginBottom: '20px' }}>
+                <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} sm={4}>
+                        <TextField
+                            label="Дата заказа"
+                            type="date"
+                            value={searchDate}
+                            onChange={(e) => setSearchDate(e.target.value)}
+                            InputLabelProps={{
+                                shrink: true,
+                            }}
+                            fullWidth
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                        <TextField
+                            label="Статус заказа"
+                            select
+                            SelectProps={{
+                                native: true,
+                            }}
+                            value={searchStatus}
+                            onChange={(e) => setSearchStatus(e.target.value)}
+                            fullWidth
+                        >
+                            <option value="">Все статусы</option>
+                            {allowedStatuses.map(status => (
+                                <option key={status} value={status}>{status}</option>
+                            ))}
+                        </TextField>
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                        <Box sx={{ display: 'flex', gap: '10px' }}>
+                            <Button variant="contained" color="primary" onClick={exportToExcel}>
+                                Экспорт в Excel
+                            </Button>
+                            <Button variant="contained" color="secondary" onClick={exportToWord}>
+                                Экспорт в Word
+                            </Button>
+                        </Box>
+                    </Grid>
+                </Grid>
+            </Box>
 
             {loading ? (
                 <CircularProgress />
