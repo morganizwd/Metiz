@@ -145,9 +145,7 @@ function MetizOrders() {
         }
     };
 
-    // Функция для экспорта в Excel
     const exportToExcel = () => {
-        // Подготовка данных
         const data = filteredOrders.map((order) => ({
             'ID Заказа': order.id,
             'Время выполнения': order.completion_time || 'Не указано',
@@ -161,77 +159,98 @@ function MetizOrders() {
             'Дата Заказа': new Date(order.date_of_ordering).toLocaleString(),
         }));
 
-        // Создание рабочей книги и листа
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Заказы');
 
-        // Генерация буфера и сохранение файла
         const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         const dataBlob = new Blob([excelBuffer], { type: 'application/octet-stream' });
         saveAs(dataBlob, 'metiz_orders_report.xlsx');
     };
 
-    // Функция для экспорта в Word
     const exportToWord = async () => {
-        // Создание таблицы
-        const tableRows = [
-            new DocxTableRow({
-                children: [
-                    new DocxTableCell({ children: [new Paragraph('ID Заказа')] }),
-                    new DocxTableCell({ children: [new Paragraph('Время выполнения')] }),
-                    new DocxTableCell({ children: [new Paragraph('Имя Клиента')] }),
-                    new DocxTableCell({ children: [new Paragraph('Телефон Клиента')] }),
-                    new DocxTableCell({ children: [new Paragraph('Пожелания')] }),
-                    new DocxTableCell({ children: [new Paragraph('Адрес Доставки')] }),
-                    new DocxTableCell({ children: [new Paragraph('Товары')] }),
-                    new DocxTableCell({ children: [new Paragraph('Общая Стоимость (₽)')] }),
-                    new DocxTableCell({ children: [new Paragraph('Статус')] }),
-                    new DocxTableCell({ children: [new Paragraph('Дата Заказа')] }),
-                ],
-            }),
-        ];
+        try {
+            const tableRows = [
+                new DocxTableRow({
+                    children: [
+                        new DocxTableCell({ children: [new Paragraph('ID Заказа')] }),
+                        new DocxTableCell({ children: [new Paragraph('Время выполнения')] }),
+                        new DocxTableCell({ children: [new Paragraph('Имя Клиента')] }),
+                        new DocxTableCell({ children: [new Paragraph('Телефон Клиента')] }),
+                        new DocxTableCell({ children: [new Paragraph('Пожелания')] }),
+                        new DocxTableCell({ children: [new Paragraph('Адрес Доставки')] }),
+                        new DocxTableCell({ children: [new Paragraph('Товары')] }),
+                        new DocxTableCell({ children: [new Paragraph('Общая Стоимость (₽)')] }),
+                        new DocxTableCell({ children: [new Paragraph('Статус')] }),
+                        new DocxTableCell({ children: [new Paragraph('Дата Заказа')] }),
+                    ],
+                }),
+            ];
 
-        filteredOrders.forEach(order => {
-            tableRows.push(new DocxTableRow({
-                children: [
-                    new DocxTableCell({ children: [new Paragraph(order.id.toString())] }),
-                    new DocxTableCell({ children: [new Paragraph(order.completion_time || 'Не указано')] }),
-                    new DocxTableCell({ children: [new Paragraph(`${order.User.name} ${order.User.surname}`)] }),
-                    new DocxTableCell({ children: [new Paragraph(order.User.phone)] }),
-                    new DocxTableCell({ children: [new Paragraph(order.description || '—')] }),
-                    new DocxTableCell({ children: [new Paragraph(order.delivery_address)] }),
-                    new DocxTableCell({ children: [new Paragraph(order.OrderItems.map(item => `${item.Product.name} x ${item.quantity}`).join('; '))] }),
-                    new DocxTableCell({ children: [new Paragraph(order.total_cost.toString())] }),
-                    new DocxTableCell({ children: [new Paragraph(order.status)] }),
-                    new DocxTableCell({ children: [new Paragraph(new Date(order.date_of_ordering).toLocaleString())] }),
-                ],
-            }));
-        });
+            filteredOrders.forEach(order => {
+                tableRows.push(
+                    new DocxTableRow({
+                        children: [
+                            new DocxTableCell({ children: [new Paragraph(order.id?.toString() || 'N/A')] }),
+                            new DocxTableCell({ children: [new Paragraph(order.completion_time || 'Не указано')] }),
+                            new DocxTableCell({ children: [new Paragraph(`${order.User?.name || 'N/A'} ${order.User?.surname || ''}`.trim())] }),
+                            new DocxTableCell({ children: [new Paragraph(order.User?.phone || 'N/A')] }),
+                            new DocxTableCell({ children: [new Paragraph(order.description || '—')] }),
+                            new DocxTableCell({ children: [new Paragraph(order.delivery_address || 'N/A')] }),
+                            new DocxTableCell({
+                                children: [
+                                    new Paragraph(
+                                        order.OrderItems?.map(item => `${item.Product?.name || 'Товар'} x ${item.quantity}`).join('; ') || 'Нет товаров'
+                                    )
+                                ],
+                            }),
+                            new DocxTableCell({ children: [new Paragraph(order.total_cost?.toString() || '0')] }),
+                            new DocxTableCell({ children: [new Paragraph(order.status || 'N/A')] }),
+                            new DocxTableCell({ children: [new Paragraph(new Date(order.date_of_ordering).toLocaleString() || 'N/A')] }),
+                        ],
+                    })
+                );
+            });
 
-        const doc = new Document({
-            sections: [{
-                properties: {},
-                children: [
-                    new Paragraph({
-                        text: 'Отчет по заказам Metiz',
-                        heading: 'Title',
-                        alignment: 'CENTER',
-                    }),
-                    new Paragraph({ text: '', spacing: { after: 200 } }), // Пустая строка
-                    new DocxTable({
-                        rows: tableRows,
-                        width: {
-                            size: 100,
-                            type: 'pct',
-                        },
-                    }),
-                ],
-            }],
-        });
+            const table = new DocxTable({
+                rows: tableRows,
+                width: {
+                    size: 100,
+                    type: 'pct',
+                },
+                borders: {
+                    top: { style: 'single', size: 1, color: '000000' },
+                    bottom: { style: 'single', size: 1, color: '000000' },
+                    left: { style: 'single', size: 1, color: '000000' },
+                    right: { style: 'single', size: 1, color: '000000' },
+                    insideHorizontal: { style: 'single', size: 1, color: '000000' },
+                    insideVertical: { style: 'single', size: 1, color: '000000' },
+                },
+            });
 
-        const blob = await Packer.toBlob(doc);
-        saveAs(blob, 'metiz_orders_report.docx');
+            const doc = new Document({
+                sections: [
+                    {
+                        properties: {},
+                        children: [
+                            new Paragraph({
+                                text: 'Отчет по заказам Metiz',
+                                heading: 'Heading1', 
+                                alignment: 'center',
+                            }),
+                            new Paragraph({ text: '\n' }),
+                            table,
+                        ],
+                    },
+                ],
+            });
+
+            const blob = await Packer.toBlob(doc);
+            saveAs(blob, 'metiz_orders_report.docx');
+        } catch (error) {
+            console.error('Ошибка при создании отчета в Word:', error);
+            alert('Не удалось создать отчет в Word.');
+        }
     };
 
     if (loading)
